@@ -1,0 +1,142 @@
+#step 1 load the nesaccary libraries
+# Load necessary libraries
+install.packages("rmarkdown")
+library(tidyverse)  # For data manipulation and visualization
+library(caret)      # For splitting data and model evaluation
+library(ggplot2)    # For data visualization
+library(corrplot)   # For correlation matrix visualization
+library(randomForest) # For Random Forest modeling
+#Step 2: Load the Dataset
+# Load the dataset
+data <- read.csv("/Users/sewantyupreti/Downloads/StudentPerformanceFactors.csv")
+
+# View the first few rows
+head(data)
+#Step 3: Exploratory Data Analysis (EDA)
+# Summary of the dataset
+summary(data)
+
+# Check for missing values
+colSums(is.na(data))
+#Distribution of Numerical Variables
+# Histogram for numerical variables
+hist(data$Hours_Studied, main = "Hours Studied", xlab = "Hours")
+hist(data$Attendance, main = "Attendance", xlab = "Percentage")
+hist(data$Exam_Score, main = "Exam Score", xlab = "Score")
+#Distribution of Categorical Variables
+# Bar plots for categorical variables
+ggplot(data, aes(x = Parental_Involvement)) + geom_bar()
+ggplot(data, aes(x = Motivation_Level)) + geom_bar()
+ggplot(data, aes(x = School_Type)) + geom_bar()
+#Correlation Analysis
+# Correlation matrix for numerical variables
+cor_matrix <- cor(data[, sapply(data, is.numeric)])
+corrplot(cor_matrix, method = "circle")
+#Step 4: Outlier Detection and Removal
+# Function to remove outliers using the IQR method
+remove_outliers <- function(df) {
+  df_clean <- df %>%
+    mutate(across(where(is.numeric), function(x) {
+      Q1 <- quantile(x, 0.25, na.rm = TRUE)
+      Q3 <- quantile(x, 0.75, na.rm = TRUE)
+      IQR_value <- Q3 - Q1
+      x[x < (Q1 - 1.5 * IQR_value) | x > (Q3 + 1.5 * IQR_value)] <- NA
+      return(x)
+    })) %>%
+    na.omit()  # Remove rows with NA values
+  return(df_clean)
+}
+
+# Apply the function to remove outliers
+clean_data <- remove_outliers(data)
+
+# Save the cleaned dataset (optional)
+write.csv(clean_data, "cleaned_data.csv", row.names = FALSE)
+
+# Display summary of cleaned data
+summary(clean_data)
+#Visualize Outliers Before and After Removal
+# Select only numeric columns
+numeric_data <- data %>% select(where(is.numeric))
+clean_numeric_data <- clean_data %>% select(where(is.numeric))
+
+# Create boxplots
+par(mfrow = c(1, 2))  # Split plotting window into two columns
+boxplot(numeric_data, col = "red", main = "Before Outlier Removal")
+boxplot(clean_numeric_data, col = "green", main = "After Outlier Removal")
+#Step 5: Relationship with Target Variable
+# Scatter plots for numerical variables vs. Exam_Score
+ggplot(data, aes(x = Hours_Studied, y = Exam_Score)) + geom_point() + geom_smooth(method = "lm")
+ggplot(data, aes(x = Previous_Scores, y = Exam_Score)) + geom_point() + geom_smooth(method = "lm")
+# Box plots for categorical variables vs. Exam_Score
+ggplot(data, aes(x = Parental_Involvement, y = Exam_Score)) + geom_boxplot()
+ggplot(data, aes(x = Motivation_Level, y = Exam_Score)) + geom_boxplot()
+#Step 6: Data Preprocessing
+#Scale Numerical Features
+# Standardize numerical features
+scaled_data <- data %>% mutate(across(where(is.numeric), scale))
+
+# View the scaled data
+head(scaled_data)
+# Convert categorical variables to factors
+data$Parental_Involvement <- factor(data$Parental_Involvement, levels = c("Low", "Medium", "High"))
+data$Motivation_Level <- factor(data$Motivation_Level, levels = c("Low", "Medium", "High"))
+data$School_Type <- factor(data$School_Type, levels = c("Public", "Private"))
+
+# Convert factors to numerical (if needed)
+data$Parental_Involvement <- as.numeric(data$Parental_Involvement)
+data$Motivation_Level <- as.numeric(data$Motivation_Level)
+data$School_Type <- as.numeric(data$School_Type)
+#Step 7: Statistical Analysis
+#Fit a Linear Regression Model
+# Fit a linear regression model
+model <- lm(Exam_Score ~ ., data = data)
+summary(model)
+
+# Check for significant predictors
+summary(model)$coefficients
+# Use random forest for feature importance
+rf_model <- randomForest(Exam_Score ~ ., data = data, importance = TRUE)
+importance(rf_model)
+#Step 8: Model Evaluation
+#Split the Data into Training and Testing Sets
+# Splitting data into training and testing sets
+set.seed(123)
+train_index <- createDataPartition(data$Exam_Score, p = 0.8, list = FALSE)
+train_data <- data[train_index, ]
+test_data <- data[-train_index, ]
+#Evaluate Regression Model
+# Predict on test data
+predictions <- predict(model, newdata = test_data)
+
+# Calculate RMSE
+rmse <- sqrt(mean((test_data$Exam_Score - predictions)^2))
+print(paste("RMSE:", rmse))
+
+# Calculate R-squared
+rsquared <- cor(test_data$Exam_Score, predictions)^2
+print(paste("R-squared:", rsquared))
+#Step 9: Random Forest Model
+
+#Train the Random Forest Model
+# Train the Random Forest model
+set.seed(123)
+rf_model <- randomForest(Exam_Score ~ ., data = train_data, importance = TRUE)
+
+# View the model summary
+print(rf_model)
+# Make predictions
+predictions <- predict(rf_model, newdata = test_data)
+
+# View the predictions
+head(predictions)
+#Evaluate the Random Forest Model
+# Calculate RMSE
+rmse <- sqrt(mean((test_data$Exam_Score - predictions)^2))
+print(paste("RMSE:", rmse))
+
+# Calculate R-squared
+rss <- sum((test_data$Exam_Score - predictions)^2)
+tss <- sum((test_data$Exam_Score - mean(test_data$Exam_Score))^2)
+rsquared <- 1 - (rss / tss)
+print(paste("R-squared:", rsquared))
